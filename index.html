@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+
+<body>
+    <style>
+        * {
+            padding: 0;
+            margin: 0;
+            box-sizing: border-box;
+        }
+
+        .mainFrame {
+            overflow-x: hidden;
+            height: 100vh;
+            width: 100vw;
+            background-color: #FFF;
+            display: flex;
+            justify-content: space-evenly;
+            align-items: center;
+        }
+
+        .timelinesContainer,
+        .controls {
+            height: 95vh;
+            width: 87vw;
+            background-color: rgba(103, 120, 121, 0.196);
+            padding-top: 0px;
+            overflow-y: scroll;
+
+            flex-direction: column;
+            box-shadow:
+                5px 5px 5px #000,
+                -2px -2px 5px #000;
+            display: flex;
+            justify-content: flex-start;
+            align-items: flex-start;
+        }
+
+        .controls {
+            width: 10vw;
+            overflow: hidden;
+            padding: 15px;
+        }
+
+        .textArea {
+            width: 95%;
+        }
+
+        .timeline_frame,
+        .real_timeline_frame {
+            margin-left: 20px;
+            width: fit-content;
+            height: fit-content;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+            align-items: start;
+        }
+
+        .real_timeline_frame {
+            position: sticky;
+            top: 0;
+            z-index: 300;
+            background-color: #FFF;
+        }
+
+        .timeline_title,
+        .real_timeline_title {
+            font-size: 20px;
+            color: rgb(35, 42, 50);
+            position: sticky;
+            padding-left: 10px;
+            left: 20px;
+            font-family: Verdana, Geneva, Tahoma, sans-serif;
+            z-index: 200;
+        }
+
+        .real_timeline_title {
+            font-weight: 1000;
+            background-color: #FFF;
+        }
+
+        .timeline,
+        .real_timeline {
+            height: 8.5vh;
+            width: fit-content;
+            border: 2px solid #000;
+            border-radius: 5px;
+            display: flex;
+            flex-direction: row;
+            justify-content: flex-start;
+        }
+
+        .real_timeline {
+            border-bottom: 4px solid rgb(100, 245, 51);
+            border-top: 4px solid rgb(100, 245, 51);
+        }
+
+        .timelog {
+            height: 98%;
+            background-color: rgb(69, 125, 160);
+            border: 1px solid #FFF;
+            padding: 5px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+            align-items: flex-start;
+        }
+
+        .clockCycle {
+            height: 100vh;
+            background-color: transparent;
+            border: 1px dotted rgb(15, 241, 15);
+            padding: 1px;
+            overflow: visible;
+            z-index: 100;
+        }
+    </style>
+    <div id="mainFrame" class="mainFrame">
+        <div class="controls">
+            <span>Logs</span>
+            <textarea name="" id="logs" cols="20" rows="10" class="textArea"></textarea>
+            <br>
+            <span>Real time resolution</span>
+            <input type="number" id="resolution" name="resolution" min="1" max="1000" value="250">
+            <br>
+            <span>Time to pixel ratio</span>
+            <input type="number" id="ratio" name="ratio" min="1" max="1000" value="0.3">
+            <br>
+            <button onclick="generate()"> Generate graph</button>
+        </div>
+        <div class="timelinesContainer">
+        </div>
+    </div>
+    <script>
+        const generate = () => {
+            // Gets raw log data and graphic settings from input
+            const data = document.getElementById('logs').value;
+            const timeToPxRatio = document.getElementById('ratio').value;
+            const clockIncrement = document.getElementById('resolution').value;
+            // Chops data into individual logs       
+            const individualLogs = data.replaceAll('\n', '')
+                .split('LOG')
+                .filter(log => log != '');
+            // Makes an array of distinct log types. Each will be a different timeline
+            const eventTypes = Array.from(
+                new Set(
+                    individualLogs
+                        .map(log => log.split(':')[0].trim())
+                )
+            );
+            console.log(eventTypes);
+
+            // Gets overal min and max time in the timeline
+            const allTimes = individualLogs.map(log => Number(log.split(':')[1].trim())).sort();
+            const minTime = allTimes[0];
+            const maxTime = allTimes[allTimes.length - 1];
+
+            // Builds a bidimentional array with all the logs sorted into their respective timeline array
+            const allTimelines = eventTypes.map(type => {
+                return {
+                    typeName: type,
+                    logs: individualLogs.filter(log => log.split(':')[0].trim() === type).map(log => {
+                        const splitLog = log.split(':');
+                        return {
+                            time: splitLog[1].trim(),
+                            value: splitLog[2].trim(),
+                        }
+                    })
+                };
+            });
+            console.log(allTimelines);
+            // Builds log timelines html
+
+            const timeLineComponent = (typeName, logs) => `
+                <div class='timeline_frame'>
+                    <span class='timeline_title'>${typeName}</span>
+                    <div class='timeline'>${logs}</div>
+                </div>
+            `;
+            const eventlogComponent = (time, value) => `
+                <div class="timelog" style="width:${time * timeToPxRatio}px;">${value.includes(',') ? value.split(',').map(x => `<div>${x}</div>`).join('') : value
+                }</div>
+            `;
+            const timelinesHtml = allTimelines.map(({ typeName, logs }) =>
+                timeLineComponent(
+                    typeName,
+                    logs.map((log, index) => {
+                        const nextEvent = logs[index + 1];
+                        const nextEventTime = nextEvent === undefined ? maxTime + 100 : Number(nextEvent.time);
+                        const time = nextEventTime - log.time;
+                        const firstOffsetBox = index === 0 ? `
+                            <div style='width:${(log.time - minTime) * timeToPxRatio}px'></div>
+                        ` : '';
+                        const logBox = eventlogComponent(time, log.value);
+                        return `${firstOffsetBox}${logBox}`;
+                    }).join('')
+                )
+            ).join('');
+            // Builds html representing the real time
+            const clockCycles = Array.from(Array(Math.ceil((maxTime - minTime) / clockIncrement) + 1).keys()).map(n => n * clockIncrement + minTime);
+            const clockCyclesHtml = clockCycles
+                .map(t => `<div class="clockCycle" style="width:${clockIncrement * timeToPxRatio}px;">${t}</div>`)
+                .join('');
+            const clockTimelineHtml = `
+                    <div class='real_timeline_frame'>
+                        <span class='real_timeline_title'>Real Time(ms)</span>
+                        <div class='real_timeline'>${clockCyclesHtml}</div>
+                    </div>
+            `;
+            console.log(Math.ceil((maxTime - minTime) / clockIncrement));
+            console.log(clockCycles);
+            console.log(clockCycles[clockCycles.length - 1]);
+            console.log(maxTime);
+            // Renders real time and logs timelines
+            document.getElementsByClassName('timelinesContainer')[0].innerHTML = clockTimelineHtml + timelinesHtml;
+        };
+        // Raw data sample
+        const data = `LOG  pauseOrUnpause: 699872 : pause!
+ LOG  oneSeekComplete: 701165 : nonVocalsVideoReady
+ LOG  pauseOrUnpause: 701168 : pause!
+ LOG  oneSeekComplete: 701217 : vocalsVideoReady
+ LOG  pauseOrUnpause: 701225 : play!
+ LOG  videoOnProgressHandler1: 702257 : 0
+ LOG  videoOnProgressHandler2: 702259 : 0
+ LOG  videoOnProgressHandler1: 705690 : 0
+ LOG  videoOnProgressHandler2: 705691 : 0.017
+ LOG  videoOnProgressHandler1: 705836 : 0.217
+ LOG  videoOnProgressHandler2: 705838 : 0.331
+ LOG  videoOnProgressHandler1: 706161 : 0.521
+ LOG  videoOnProgressHandler2: 706162 : 0.631
+ LOG  videoOnProgressHandler1: 706249 : 0.825
+ LOG  videoOnProgressHandler2: 706250 : 0.933
+ LOG  videoOnProgressHandler1: 706339 : 1.127
+ LOG  videoOnProgressHandler2: 706340 : 1.235
+ LOG  videoOnProgressHandler1: 706439 : 1.429
+ LOG  videoOnProgressHandler2: 706440 : 1.538
+ LOG  videoOnProgressHandler1: 706562 : 1.729
+ LOG  videoOnProgressHandler2: 706563 : 1.851
+ LOG  videoOnProgressHandler1: 706656 : 2.032
+ LOG  videoOnProgressHandler2: 706657 : 2.153
+ LOG  videoOnProgressHandler1: 706757 : 2.336
+ LOG  videoOnProgressHandler2: 706758 : 2.454
+ LOG  videoOnProgressHandler1: 706851 : 2.637
+ LOG  videoOnProgressHandler2: 706852 : 2.757
+ LOG  videoOnProgressHandler1: 706942 : 2.939
+ LOG  videoOnProgressHandler2: 706943 : 3.058
+ LOG  videoOnProgressHandler1: 707031 : 3.241
+ LOG  videoOnProgressHandler2: 707032 : 3.375
+ LOG  videoOnProgressHandler1: 707125 : 3.576
+ LOG  videoOnProgressHandler2: 707126 : 3.678
+ LOG  videoOnProgressHandler1: 707232 : 3.888
+ LOG  videoOnProgressHandler2: 707233 : 3.99
+ LOG  videoOnProgressHandler1: 707326 : 4.189
+ LOG  videoOnProgressHandler2: 707327 : 4.291
+ LOG  videoOnProgressHandler1: 707420 : 4.499
+ LOG  videoOnProgressHandler2: 707421 : 4.601
+ LOG  videoOnProgressHandler1: 707513 : 4.816
+ LOG  videoOnProgressHandler2: 707514 : 4.919
+ LOG  videoOnProgressHandler1: 707782 : 5.124
+ LOG  videoOnProgressHandler2: 707791 : 5.234
+ LOG  videoOnProgressHandler1: 708089 : 5.429
+ LOG  videoOnProgressHandler2: 708094 : 5.536
+ LOG  videoOnProgressHandler1: 708402 : 5.743
+ LOG  videoOnProgressHandler2: 708404 : 5.846
+ LOG  videoOnProgressHandler1: 708709 : 6.048
+ LOG  videoOnProgressHandler2: 708711 : 6.153
+ LOG  videoOnProgressHandler1: 709023 : 6.364
+ LOG  videoOnProgressHandler2: 709025 : 6.467
+ LOG  videoOnProgressHandler1: 709324 : 6.665
+ LOG  videoOnProgressHandler2: 709327 : 6.769
+ LOG  videoOnProgressHandler1: 709648 : 6.989
+ LOG  videoOnProgressHandler2: 709650 : 7.092
+ LOG  videoOnProgressHandler1: 709954 : 7.295
+ LOG  videoOnProgressHandler2: 709957 : 7.398
+ LOG  videoOnProgressHandler1: 710271 : 7.612
+ LOG  videoOnProgressHandler2: 710273 : 7.715
+ LOG  videoOnProgressHandler1: 710583 : 7.924
+ LOG  videoOnProgressHandler2: 710585 : 8.028
+ LOG  videoOnProgressHandler1: 710903 : 8.245
+ LOG  videoOnProgressHandler2: 710904 : 8.347
+ LOG  videoOnProgressHandler1: 711210 : 8.553
+ LOG  videoOnProgressHandler2: 711211 : 8.655
+ LOG  videoOnProgressHandler1: 711521 : 8.863
+ LOG  videoOnProgressHandler2: 711525 : 8.965
+ LOG  videoOnProgressHandler1: 711841 : 9.17
+ LOG  videoOnProgressHandler2: 711844 : 9.272
+ LOG  videoOnProgressHandler1: 712196 : 9.471
+ LOG  videoOnProgressHandler2: 712197 : 9.573
+ LOG  videoOnProgressHandler1: 712432 : 9.773
+ LOG  videoOnProgressHandler2: 712434 : 9.876
+ LOG  videoOnProgressHandler1: 712756 : 10.097
+ LOG  videoOnProgressHandler2: 712759 : 10.2
+ LOG  videoOnProgressHandler1: 713067 : 10.406
+ LOG  videoOnProgressHandler2: 713069 : 10.511
+ LOG  videoOnProgressHandler1: 713387 : 10.728
+ LOG  videoOnProgressHandler2: 713389 : 10.831
+ LOG  videoOnProgressHandler1: 713690 : 11.029
+ LOG  videoOnProgressHandler2: 713696 : 11.138
+ LOG  videoOnProgressHandler1: 714010 : 11.351
+ LOG  videoOnProgressHandler2: 714011 : 11.453
+ LOG  renderOfACurrent: 714149 : Woke,11.4,11.66
+ LOG  startAnimation: 714196 : 0,Woke
+ LOG  startAnimation: 714251 : 86.1,Woke
+ LOG  videoOnProgressHandler1: 714317 : 11.657
+ LOG  videoOnProgressHandler2: 714319 : 11.762
+ LOG  renderOfACurrent: 714458 : up,11.66,12.04
+ LOG  startAnimation: 714504 : 0,up
+ LOG  startAnimation: 714572 : 43.43,up
+ LOG  videoOnProgressHandler1: 714627 : 11.97
+ LOG  videoOnProgressHandler2: 714629 : 12.072
+ LOG  renderOfACurrent: 714778 : a,12.04,12.49
+ LOG  startAnimation: 714895 : 0,a
+ LOG  startAnimation: 714940 : 26.29,a
+ LOG  videoOnProgressHandler1: 714943 : 12.272
+ LOG  videoOnProgressHandler2: 714945 : 12.374
+ LOG  videoOnProgressHandler1: 715234 : 12.577
+ LOG  videoOnProgressHandler2: 715236 : 12.679
+ LOG  renderOfACurrent: 715361 : little,12.49,12.93
+ LOG  startAnimation: 715399 : 0,little
+ LOG  startAnimation: 715473 : 71.62,little
+ LOG  videoOnProgressHandler1: 715542 : 12.883
+ LOG  videoOnProgressHandler2: 715543 : 12.986
+ LOG  renderOfACurrent: 715665 : too,12.93,13.31
+ LOG  startAnimation: 715709 : 0,too
+ LOG  startAnimation: 715753 : 55.62,too
+ LOG  videoOnProgressHandler1: 715853 : 13.195
+ LOG  videoOnProgressHandler2: 715855 : 13.298
+ LOG  videoOnProgressHandler1: 716163 : 13.506
+ LOG  videoOnProgressHandler2: 716166 : 13.61
+ LOG  renderOfACurrent: 716283 : late,13.31,13.76
+ LOG  startAnimation: 716325 : 0,late
+ LOG  startAnimation: 716414 : 63.24,late
+ LOG  videoOnProgressHandler1: 716468 : 13.811
+ LOG  videoOnProgressHandler2: 716469 : 13.913
+ LOG  renderOfACurrent: 716590 : this,13.76,14.17
+ LOG  startAnimation: 716628 : 0,this
+ LOG  startAnimation: 716672 : 57.9,this
+ LOG  videoOnProgressHandler1: 716775 : 14.114
+ LOG  videoOnProgressHandler2: 716777 : 14.22
+ LOG  renderOfACurrent: 716917 : morning,14.17,15.26
+ LOG  startAnimation: 716962 : 0,morning
+ LOG  startAnimation: 717023 : 124.57,morning
+ LOG  videoOnProgressHandler1: 717081 : 14.423
+ LOG  videoOnProgressHandler2: 717083 : 14.525
+ LOG  videoOnProgressHandler1: 717391 : 14.733
+ LOG  videoOnProgressHandler2: 717395 : 14.835
+ LOG  videoOnProgressHandler1: 717701 : 15.043
+ LOG  videoOnProgressHandler2: 717705 : 15.145
+ LOG  videoOnProgressHandler1: 718273 : 15.347
+ LOG  videoOnProgressHandler2: 718274 : 15.449
+ LOG  videoOnProgressHandler1: 718411 : 15.684
+ LOG  videoOnProgressHandler2: 718412 : 15.786
+ LOG  videoOnProgressHandler1: 718655 : 15.997
+ LOG  videoOnProgressHandler2: 718657 : 16.1
+ LOG  renderOfACurrent: 718767 : But,15.94,16.19
+ LOG  startAnimation: 718808 : 0,But
+ LOG  startAnimation: 718850 : 56,But
+ LOG  videoOnProgressHandler1: 718959 : 16.301
+ LOG  videoOnProgressHandler2: 718966 : 16.408
+ LOG  renderOfACurrent: 719089 : I,16.19,16.46
+ LOG  startAnimation: 719134 : 0,I
+ LOG  sliderStartChangeHandler: 719143 : 0
+ LOG  pauseOrUnpause: 719148 : pause!
+ LOG  startAnimation: 719211 : 16,I
+ LOG  sliderStopChangeHandler: 719410 : 122.52940000000001
+ LOG  pauseOrUnpause: 719414 : pause!
+ LOG  oneSeekComplete: 719827 : nonVocalsVideoReady
+ LOG  pauseOrUnpause: 719840 : pause!
+ LOG  oneSeekComplete: 719924 : vocalsVideoReady
+ LOG  pauseOrUnpause: 719927 : play!
+ LOG  videoOnProgressHandler1: 720042 : 122.532
+ LOG  videoOnProgressHandler2: 720044 : 122.529
+ LOG  videoOnProgressHandler1: 720353 : 122.667
+ LOG  videoOnProgressHandler2: 720355 : 122.818
+ LOG  videoOnProgressHandler1: 720660 : 122.974
+ LOG  videoOnProgressHandler2: 720662 : 123.125
+ LOG  renderOfACurrent: 720817 : those,123.09,123.35
+ LOG  startAnimation: 720845 : 0,those
+ LOG  startAnimation: 720924 : 86.1,those
+ LOG  videoOnProgressHandler1: 720962 : 123.276
+ LOG  videoOnProgressHandler2: 720966 : 123.43
+ LOG  renderOfACurrent: 721097 : feelings,123.35,123.59
+ LOG  startAnimation: 721133 : 0,feelings
+ LOG  startAnimation: 721199 : 118.1,feelings
+ LOG  videoOnProgressHandler1: 721273 : 123.587
+ LOG  videoOnProgressHandler2: 721274 : 123.738
+ LOG  renderOfACurrent: 721416 : for,123.59,123.84
+ LOG  startAnimation: 721450 : 0,for
+ LOG  startAnimation: 721486 : 50.29,for
+ LOG  videoOnProgressHandler1: 721589 : 123.903
+ LOG  videoOnProgressHandler2: 721591 : 124.054
+ LOG  renderOfACurrent: 721735 : you,123.84,124.1
+ LOG  startAnimation: 721763 : 0,you
+ LOG  startAnimation: 721797 : 60.19,you
+ LOG  videoOnProgressHandler1: 721895 : 124.21
+ LOG  videoOnProgressHandler2: 721897 : 124.36
+ LOG  videoOnProgressHandler1: 722197 : 124.511
+ LOG  videoOnProgressHandler2: 722265 : 124.669
+ LOG  videoOnProgressHandler1: 722511 : 124.821
+ LOG  videoOnProgressHandler2: 722517 : 124.981
+ LOG  pauseOrUnpause: 722750 : pause!
+ LOG  videoOnProgressHandler1: 722807 : 125.122`;
+
+    </script>
+</body>
+
+</html>
